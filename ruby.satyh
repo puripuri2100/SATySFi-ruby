@@ -1,0 +1,689 @@
+@require: list
+
+module Ruby: sig
+
+  type mode
+  type intrusion
+  type setting
+  val m : mode
+  val g : mode
+  val j : mode
+  val none : intrusion
+  val small : intrusion
+  val big : intrusion
+  val suppresses : intrusion
+  val mode : mode -> setting
+  val before-intrusion : intrusion -> setting
+  val after-intrusion : intrusion -> setting
+  val make-ruby-ctx : (context -> context) -> setting
+  val ruby : context -> setting list -> string list -> inline-text list -> inline-boxes
+  direct \ruby : [setting list?; string list; inline-text list] inline-cmd
+
+
+end = struct
+
+type mode =
+  | Mono
+  | Group
+  | Jukugo
+
+let m = Mono
+let g = Group
+let j = Jukugo
+
+
+type intrusion =
+  | NoneIntrusion
+  | SmallIntrusion
+  | BigIntrusion
+  | SuppressionProtrusion
+
+let none = NoneIntrusion
+let small = SmallIntrusion
+let big = BigIntrusion
+let suppresses = SuppressionProtrusion
+
+
+type setting =
+  | Mode of mode
+  | BeforeIntrusion of intrusion
+  | AfterIntrusion of intrusion
+  | MakeRubyCtx of (context -> context)
+
+let mode mode = Mode(mode)
+let before-intrusion intrusion = BeforeIntrusion(intrusion)
+let after-intrusion intrusion = AfterIntrusion(intrusion)
+let make-ruby-ctx f = MakeRubyCtx(f)
+
+
+let default-mode = Mono
+
+let default-before-intrusion = NoneIntrusion
+
+let default-after-intrusion = NoneIntrusion
+
+let default-make-ruby-ctx =
+  (fun ctx -> (
+    let text-size = get-font-size ctx in
+    let ruby-text-size = text-size *' 0.5 in
+    let ruby-ctx = set-font-size ruby-text-size ctx in
+    ruby-ctx
+  ))
+
+
+let-mutable ruby-config-mode-ref <- default-mode
+
+let-mutable ruby-config-before-intrusion-ref <- default-before-intrusion
+
+let-mutable ruby-config-after-intrusion-ref <- default-after-intrusion
+
+let-mutable ruby-config-make-ruby-ctx-ref <- default-make-ruby-ctx
+
+let set-ruby-config setting =
+  match setting with
+  | Mode(mode) -> (ruby-config-mode-ref <- mode)
+  | BeforeIntrusion(intrusion) -> (ruby-config-before-intrusion-ref <- intrusion)
+  | AfterIntrusion(intrusion) -> (ruby-config-after-intrusion-ref <- intrusion)
+  | MakeRubyCtx(f) -> (ruby-config-make-ruby-ctx-ref <- f)
+
+let set-ruby-default-config () =
+  let () = ruby-config-mode-ref <- default-mode in
+  let () = ruby-config-before-intrusion-ref <- default-before-intrusion in
+  let () = ruby-config-after-intrusion-ref <- default-after-intrusion in
+  let () = ruby-config-make-ruby-ctx-ref <- default-make-ruby-ctx in
+  ()
+
+let default-small-intrusion-value = 0.5
+let default-big-intrusion-value = 1.0
+
+% 文字列の分割
+let str-to-lst str =
+  let str-len = string-length str in
+  let-rec sub lst n =
+    if n <= 0 then
+      lst
+    else
+      let s = string-sub str (n - 1) 1 in
+      sub (s::lst) (n - 1)
+  in
+  sub [] str-len
+
+
+let map-function first-f f last-f once-f lst =
+  let-rec other-function lst =
+    match lst with
+    | [] -> []
+    | x::[] -> [last-f x]
+    | x::xs -> f x :: other-function xs
+  in
+  match lst with
+  | [] -> []
+  | x::[] -> [once-f x]
+  | x::xs -> first-f x :: other-function xs
+
+% スペースサイズを与えると、それを前後に配置する
+let make-center space ib =
+  inline-skip space ++ ib ++ inline-skip space
+
+% 前のスペースと後ろのスペースを与えて挟む
+let add-space before-space after-space ib =
+  inline-skip before-space ++ ib ++ inline-skip after-space
+
+
+% ルビの文字列とボディの文字列を組み合わせる
+let make-ruby-body-pair-lst rb-lst body-lst =
+  let-rec sub rb-lst body-lst pair-lst =
+    match (rb-lst, body-lst) with
+    | (_, []) -> pair-lst
+    | ([], body::bodys) -> sub [] bodys ((None, body)::pair-lst)
+    | (rb::rbs, body::bodys) -> sub rbs bodys ((Some(rb), body)::pair-lst)
+  in
+  List.reverse(sub rb-lst body-lst [])
+
+
+
+
+% 横書きのモノルビ
+let make-ruby-mono config pair-lst =
+  let ctx = config#ctx in
+  let ruby-ctx = config#ruby-ctx in
+  let ruby-font-size = get-font-size ruby-ctx in
+  let-mutable head-ib-space <- 0pt in
+  let-mutable last-ib-space <- 0pt in
+  let f (ruby-str-opt, body) is-head is-last =
+    let ruby-ib =
+      match ruby-str-opt with
+      | None -> inline-nil
+      | Some(str) -> str |> embed-string |> read-inline ruby-ctx
+    in
+    let body-ib = read-inline ctx body in
+    let (ruby-width,_,_) = get-natural-metrics ruby-ib in
+    let (body-width,_,_) = get-natural-metrics body-ib in
+    if body-width >' ruby-width then
+    let diff-width = body-width -' ruby-width in
+    let space = diff-width *' 0.5 in
+      % ルビが短い場合、ルビを中央ぞろえ
+      let ruby-ib = make-center space ruby-ib in
+      (ruby-ib, body-ib)
+    else
+      let diff-width = ruby-width -' body-width in
+      let space = diff-width *' 0.5 in
+      % 突出禁止の時の処理だけをする
+      match (is-head, is-last) with
+      | (true, true) -> (
+        let () = head-ib-space <- space in
+        let () = last-ib-space <- space in
+        % 一文字だけのとき
+        match (config#before-intrusion, config#after-intrusion) with
+        | (SuppressionProtrusion, _) -> (
+          % beforeの方を取る
+          (ruby-ib, body-ib ++ inline-skip diff-width)
+        )
+        | (_, SuppressionProtrusion) -> (
+          % beforeの方を取る
+          (ruby-ib, inline-skip diff-width ++ body-ib)
+        )
+        | _ -> (ruby-ib, make-center space body-ib)
+      )
+      | (true, false) -> (
+        let () = head-ib-space <- space in
+        % 先頭の文字
+        match (config#before-intrusion, config#after-intrusion) with
+        | (SuppressionProtrusion, _) -> (
+          % 先頭側にくっつける
+          (ruby-ib, body-ib ++ inline-skip diff-width)
+        )
+        | _ -> (ruby-ib, make-center space body-ib)
+      )
+      | (false, true) -> (
+        let () = last-ib-space <- space in
+        % 最後の文字
+        match (config#before-intrusion, config#after-intrusion) with
+        | (_, SuppressionProtrusion) -> (
+          % 後ろ側にくっつける
+          (ruby-ib, inline-skip diff-width ++ body-ib)
+        )
+        | _ -> (ruby-ib, make-center space body-ib)
+      )
+      | (false, false) -> (
+        % 真ん中の文字
+        (ruby-ib, make-center space body-ib)
+      )
+  in
+  let main-lst =
+    pair-lst
+    |> List.mapi (fun i pair -> (
+        match (i == 0, i == (List.length pair-lst - 1)) with
+        | (true, true) -> f pair true true
+        | (true, false) -> f pair true false
+        | (false, true) -> f pair false true
+        | (false, false) -> f pair false false
+    ))
+  in
+  let max-height =
+    List.fold-left (fun max-height (_, body-ib) -> (
+      let (_,body-height,_) = get-natural-metrics body-ib in
+      if max-height >' body-height then
+        max-height
+      else
+        body-height
+    )) 0pt main-lst
+  in
+  let main-ib =
+    main-lst
+    |> List.map (fun (ruby-ib, body-ib) -> (
+      let (w,h,_) = get-natural-metrics body-ib in
+      let pad = max-height -' h in
+      let pad-ib = inline-graphics w pad 0pt (fun _ -> []) in
+      if pad >' 0pt then
+        line-stack-bottom [ruby-ib; pad-ib; body-ib]
+      else
+        line-stack-bottom [ruby-ib; body-ib]
+    ))
+    |> List.fold-left (++) inline-nil
+  in
+  % 前側の進入
+  let before-space = !head-ib-space in
+  let after-space = !last-ib-space in
+  let before-intrusion-space =
+    match config#before-intrusion with
+    | SmallIntrusion -> (
+      let max-space =
+        ruby-font-size *' default-small-intrusion-value
+      in
+      if max-space >' before-space then
+        0pt -' before-space
+      else
+        0pt -' max-space
+    )
+    | BigIntrusion -> (
+      let max-space =
+        ruby-font-size *' default-big-intrusion-value
+      in
+      if max-space >' before-space then
+        0pt -' before-space
+      else
+        0pt -' max-space
+    )
+    | _ -> 0pt
+  in
+  % 後ろ側の進入
+  let after-intrusion-space =
+    match config#after-intrusion with
+    | SmallIntrusion -> (
+      let max-space =
+        ruby-font-size *' default-small-intrusion-value
+      in
+      if max-space >' after-space then
+        0pt -' after-space
+      else
+        0pt -' max-space
+    )
+    | BigIntrusion -> (
+      let max-space =
+        ruby-font-size *' default-big-intrusion-value
+      in
+      if max-space >' after-space then
+        0pt -' after-space
+      else
+        0pt -' max-space
+    )
+    | _ -> 0pt
+  in
+    add-space before-intrusion-space after-intrusion-space main-ib
+
+
+
+
+% 横書きのグループルビ
+let make-ruby-gruop config ruby-lst body-lst =
+  let ctx = config#ctx in
+  let ruby-ctx = config#ruby-ctx in
+  let ruby-font-size = get-font-size ruby-ctx in
+  let ruby-str = List.fold-left (^) ` ` ruby-lst in
+  let (ruby-width,_,_) =
+    ruby-str
+    |> embed-string
+    |> read-inline ruby-ctx
+    |> get-natural-metrics
+  in
+  let (body-width,_,_) =
+    body-lst
+    |> List.map (read-inline ctx)
+    |> List.fold-left (++) inline-nil
+    |> get-natural-metrics
+  in
+  let ruby-str-lst = str-to-lst ruby-str in
+  let ruby-str-size = List.length ruby-str-lst in
+  if body-width >' ruby-width then
+    let body-ib =
+      body-lst
+      |> List.map (read-inline ctx)
+      |> List.fold-left (++) inline-nil
+    in
+    % Suppressesなら端を揃え、そうでないなら他の1/2のスペース
+    match (config#before-intrusion, config#after-intrusion) with
+    | (SuppressionProtrusion, SuppressionProtrusion) -> (
+      let ruby-space =
+        (body-width -' ruby-width) *' (1.0 /. (float (ruby-str-size - 1)))
+      in
+      let ruby-ib =
+        ruby-str-lst
+        |> List.map (fun s -> s |> embed-string |> read-inline ruby-ctx)
+        |> List.fold-lefti
+          (fun i ib1 ib2 -> (
+            if i == 0 then
+              % 最初はスペースを入れない
+              ib2
+            else
+              ib1 ++ inline-skip ruby-space ++ ib2
+          ))
+          inline-nil
+      in
+      line-stack-bottom [ruby-ib; body-ib]
+    )
+    % ========= もしかしたら要らないかも 要件等
+    % ルビが短いときに突出禁止にする意味が無さそうなので一旦コメントアウト
+    %| (SuppressionProtrusion, _) -> (
+    %  let ruby-space =
+    %    (body-width -' ruby-width) *' (1.0 /. (float (ruby-str-size * 2 - 1)))
+    %  in
+    %  let ruby-ib =
+    %    ruby-str-lst
+    %    |> List.map (fun s -> s |> embed-string |> read-inline ruby-ctx)
+    %    |> List.fold-lefti
+    %      (fun i ib1 ib2 -> (
+    %        if i == 0 then
+    %          % 最初はスペースを入れない
+    %          ib2
+    %        else
+    %          if i == (ruby-str-size - 1) then
+    %            % 最後にスペースを通常の1/2分入れる
+    %            ib1 ++ inline-skip (ruby-space *' 2.0) ++ ib2 ++ inline-skip ruby-space
+    %          else
+    %            ib1 ++ inline-skip (ruby-space *' 2.0) ++ ib2
+    %      ))
+    %      inline-nil
+    %  in
+    %  line-stack-bottom [ruby-ib; body-ib]
+    %)
+    %| (_, SuppressionProtrusion) -> (
+    %  let ruby-space =
+    %    (body-width -' ruby-width) *' (1.0 /. (float (ruby-str-size * 2 - 1)))
+    %  in
+    %  let ruby-ib =
+    %    ruby-str-lst
+    %    |> List.map (fun s -> s |> embed-string |> read-inline ruby-ctx)
+    %    |> List.fold-lefti
+    %      (fun i ib1 ib2 -> (
+    %        if i == 0 then
+    %          % 最初にスペースを通常の1/2分入れる
+    %          inline-skip ruby-space ++ ib2
+    %        else
+    %          ib1 ++ inline-skip (ruby-space *' 2.0) ++ ib2
+    %      ))
+    %      inline-nil
+    %  in
+    %  line-stack-bottom [ruby-ib; body-ib]
+    %)
+    % ==============
+    | _ -> (
+      let ruby-space =
+        (body-width -' ruby-width) *' (1.0 /. (float (ruby-str-size * 2)))
+      in
+      let ruby-ib =
+        ruby-str-lst
+        |> List.map (fun s -> s |> embed-string |> read-inline ruby-ctx)
+        |> List.fold-lefti
+          (fun i ib1 ib2 -> (
+            if i == 0 then
+              % 最初にスペースを通常の1/2分入れる
+              inline-skip ruby-space ++ ib2
+            else
+              if i == (ruby-str-size - 1) then
+                % 最後にスペースを通常の1/2分入れる
+                ib1 ++ inline-skip (ruby-space *' 2.0) ++ ib2 ++ inline-skip ruby-space
+              else
+                ib1 ++ inline-skip (ruby-space *' 2.0) ++ ib2
+          ))
+          inline-nil
+      in
+      line-stack-bottom [ruby-ib; body-ib]
+    )
+  else
+    % ルビはそのまま組む
+    let ruby-ib =
+      ruby-str-lst
+      |> List.map (fun s -> s |> embed-string |> read-inline ruby-ctx)
+      |> List.fold-left (++) inline-nil
+    in
+    let body-str-size = List.length body-lst in
+    let diff-width = ruby-width -' body-width in
+    % 基本的に1:2:1で組む
+    % 進入について設定があればマイナスの長さのinline-boxをくっつける
+    % 両方突出禁止の時にのみ0:1:0で両端を揃える
+    % 片方突出禁止の場合は1:1:0か0:1:1で組む
+    % https://www.w3.org/TR/jlreq/#adjustments_of_ruby_with_length_longer_than_that_of_the_base_characters
+    % そのうえでもう片方の進入について負の長さのinline-boxを付けるかどうかを検討する
+    match (config#before-intrusion, config#after-intrusion) with
+    | (SuppressionProtrusion, SuppressionProtrusion) -> (
+      let body-space =
+        diff-width *' (1.0 /. (float (body-str-size - 1)))
+      in
+      let body-ib =
+        body-lst
+        |> List.map (read-inline ctx)
+        |> List.fold-lefti
+          (fun i ib1 ib2 -> (
+            if i == 0 then
+              % 最初はスペースを入れない
+              ib2
+            else
+              ib1 ++ inline-skip body-space ++ ib2
+          ))
+          inline-nil
+      in
+      line-stack-bottom [ruby-ib; body-ib]
+    )
+    | (SuppressionProtrusion, _) -> (
+      % スペースは0:1:1
+      let body-space =
+        diff-width *' (1.0 /. (float body-str-size))
+      in
+      let body-ib =
+        body-lst
+        |> List.map (read-inline ctx)
+        |> List.fold-lefti
+          (fun i ib1 ib2 -> (
+            if i == 0 then
+              % 最初はスペースを入れない
+              ib2
+            else
+              ib1 ++ inline-skip body-space ++ ib2
+          ))
+          inline-nil
+      in
+      let intrusion-space =
+        match config#after-intrusion with
+        | SmallIntrusion -> (
+          let max-space =
+            ruby-font-size *' default-small-intrusion-value
+          in
+          if max-space >' body-space then
+            0pt -' body-space
+          else
+            0pt -' max-space
+        )
+        | BigIntrusion -> (
+          let max-space =
+            ruby-font-size *' default-big-intrusion-value
+          in
+          if max-space >' body-space then
+            0pt -' body-space
+          else
+            0pt -' max-space
+        )
+        | _ -> 0pt
+      in
+      let ruby-ib =
+        ruby-ib ++ inline-skip intrusion-space
+      in
+      let body-ib =
+        body-ib ++ inline-skip intrusion-space
+      in
+      line-stack-bottom [ruby-ib; body-ib]
+    )
+    | (_, SuppressionProtrusion) -> (
+      % スペースは1:1:0
+      let body-space =
+        diff-width *' (1.0 /. (float body-str-size))
+      in
+      let body-ib =
+        body-lst
+        |> List.map (read-inline ctx)
+        |> List.fold-left
+          (fun ib1 ib2 -> (
+            ib1 ++ inline-skip body-space ++ ib2
+          ))
+          inline-nil
+      in
+      let intrusion-space =
+        match config#before-intrusion with
+        | SmallIntrusion -> (
+          let max-space =
+            ruby-font-size *' default-small-intrusion-value
+          in
+          if max-space >' body-space then
+            0pt -' body-space
+          else
+            0pt -' max-space
+        )
+        | BigIntrusion -> (
+          let max-space =
+            ruby-font-size *' default-big-intrusion-value
+          in
+          if max-space >' body-space then
+            0pt -' body-space
+          else
+            0pt -' max-space
+        )
+        | _ -> 0pt
+      in
+      let ruby-ib =
+        inline-skip intrusion-space ++ ruby-ib
+      in
+      let body-ib =
+        inline-skip intrusion-space ++ body-ib
+      in
+      line-stack-bottom [ruby-ib; body-ib]
+    )
+    | _ -> (
+      % スペースは1:2:1
+      let body-space-half =
+        diff-width *' (1.0 /. (float (body-str-size * 2)))
+      in
+      let body-space = body-space-half *' 2.0 in
+      let body-ib =
+        body-lst
+        |> List.map (read-inline ctx)
+        |> List.fold-lefti
+          (fun i ib1 ib2 -> (
+            if i == 0 then
+              % 最初は半分のスペース
+              ib1 ++ inline-skip body-space-half ++ ib2
+            else
+              if i == (ruby-str-size - 1) then
+                % 最後は半分のスペース
+                ib1 ++ inline-skip body-space ++ ib2 ++ inline-skip body-space-half
+              else
+                ib1 ++ inline-skip body-space ++ ib2
+          ))
+          inline-nil
+      in
+      % 前側の進入
+      let before-intrusion-space =
+        match config#before-intrusion with
+        | SmallIntrusion -> (
+          let max-space =
+            ruby-font-size *' default-small-intrusion-value
+          in
+          if max-space >' body-space-half then
+            0pt -' body-space-half
+          else
+            0pt -' max-space
+        )
+        | BigIntrusion -> (
+          let max-space =
+            ruby-font-size *' default-big-intrusion-value
+          in
+          if max-space >' body-space-half then
+            0pt -' body-space-half
+          else
+            0pt -' max-space
+        )
+        | _ -> 0pt
+      in
+      % 後ろ側の進入
+      let after-intrusion-space =
+        match config#after-intrusion with
+        | SmallIntrusion -> (
+          let max-space =
+            ruby-font-size *' default-small-intrusion-value
+          in
+          if max-space >' body-space-half then
+            0pt -' body-space-half
+          else
+            0pt -' max-space
+        )
+        | BigIntrusion -> (
+          let max-space =
+            ruby-font-size *' default-big-intrusion-value
+          in
+          if max-space >' body-space-half then
+            0pt -' body-space-half
+          else
+            0pt -' max-space
+        )
+        | _ -> 0pt
+      in
+      let ruby-ib =
+        add-space before-intrusion-space after-intrusion-space ruby-ib
+      in
+      let body-ib =
+        add-space before-intrusion-space after-intrusion-space body-ib
+      in
+      line-stack-bottom [ruby-ib; body-ib]
+    )
+
+% JIS X 4051での規定に従う
+% https://www.jisc.go.jp/app/jis/general/GnrJISNumberNameSearchList?show&jisStdNo=X4051
+let make-ruby-jukugo config ruby-lst body-lst =
+  let ruby-ctx = config#ruby-ctx in
+  let ctx = config#ctx in
+  let pair-lst = make-ruby-body-pair-lst ruby-lst body-lst in
+  % ルビがボディよりも長い場合が一つでもある場合は
+  % グループルビに移行する
+  % 全て同じか短い場合はモノルビ
+  let is-ruby-big =
+    pair-lst
+    |> List.map (fun (ruby-str-opt, body) -> (
+      match ruby-str-opt with
+      | None -> false
+      | Some(ruby-str) -> (
+        let (ruby-width,_,_) =
+          ruby-str
+          |> embed-string
+          |> read-inline ruby-ctx
+          |> get-natural-metrics
+        in
+        let (body-width,_,_) =
+          body
+          |> read-inline ctx
+          |> get-natural-metrics
+        in
+        ruby-width >' body-width
+      )
+    ))
+    |> List.fold-left ( || ) false
+  in
+  if is-ruby-big then
+    make-ruby-gruop config ruby-lst body-lst
+  else
+    make-ruby-mono config pair-lst
+
+
+
+let ruby ctx setting-lst rb-lst body-lst =
+  let () = List.iter set-ruby-config setting-lst in
+  let ruby-config-mode = !ruby-config-mode-ref in
+  let ruby-config-before-intrusion = !ruby-config-before-intrusion-ref in
+  let ruby-config-after-intrusion = !ruby-config-after-intrusion-ref in
+  let ruby-config-make-ruby-ctx = !ruby-config-make-ruby-ctx-ref in
+  let ruby-ctx = ruby-config-make-ruby-ctx ctx in
+  let ruby-config = (|
+      before-intrusion = ruby-config-before-intrusion;
+      after-intrusion = ruby-config-after-intrusion;
+      ctx = ctx;
+      ruby-ctx = ruby-ctx;
+    |)
+  in
+  let pair-lst = make-ruby-body-pair-lst rb-lst body-lst in
+  let main =
+    match ruby-config-mode with
+      | Mono -> make-ruby-mono ruby-config pair-lst
+      | Group -> make-ruby-gruop ruby-config rb-lst body-lst
+      | Jukugo -> make-ruby-jukugo ruby-config rb-lst body-lst
+  in
+  let () = set-ruby-default-config () in
+  main
+
+
+let-inline ctx \ruby ?:settings rb-lst body-lst =
+  let setting-lst =
+    match settings with
+    | None -> []
+    | Some(lst) -> lst
+  in
+  ruby ctx setting-lst rb-lst body-lst
+
+end
