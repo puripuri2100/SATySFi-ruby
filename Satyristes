@@ -10,5 +10,4 @@
     )
   )
   (opam "satysfi-ruby.opam")
-  (dependencies ())
-  (compatibility ((satyrographos "0.0.1"))))
+  (dependencies ()))

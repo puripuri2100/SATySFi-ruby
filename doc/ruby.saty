@@ -1,0 +1,128 @@
+% Copyright (c) 2020 Naoki Kaneko (a.k.a. "puripuri2100")
+%   GitHub:   https://github.com/puripuri2100
+% Repository: https://github.com/puripuri2100/SATySFi-ruby
+% version 0.1.0
+
+@require: stdjabook
+@require: code
+@require: itemize
+@require: annot
+@import: ../ruby
+
+document (|
+  title = {rubyパッケージ};
+  author = {Naoki Kaneko (a.k.a. "puripuri2100")};
+  show-title = true;
+  show-toc = true;
+|) '<
+  +section {概要} <
+    +p{\SATySFi;でルビを使うためのパッケージです。モノルビ・グループルビ・熟語ルビに対応し、JLReqになるべく準拠するようにしています。}
+    +p{現在のバージョンは0.1.0です。}
+  >
+  +section{基本的な使い方}<
+    +p{インストールは基本的にsatyrographosで行われることを想定しています。手動で行う場合は、適切な位置に配置し、読み込みも適切に行ってください。}
+    +p{rubyライブラリによって提供されるパッケージはrubyのみです。そのため、読み込みはこのようにして行います。}
+    +code(```
+@require: ruby/ruby
+    ```);
+    +p{提供されるコマンドは\code(`\ruby`);のみです。コマンドと同時に関連する関数も提供されます。モジュール名は\code(`Ruby`);です。}
+    +p{\code(`\ruby`);コマンドは引数を3つ取ります。
+    \enumerate{
+      * 設定（オプション引数）
+      * ルビ文字（string list）
+      * 親文字（inline-text list）
+    }
+    例えば、\code(``\ruby[`こ`; `ばと`]{|小|鳩|}``);のように入力すると「\ruby[`こ`; `ばと`]{|小|鳩|}」と出力されます。
+    }
+  >
+  +section{ルビのモード} <
+    +subsection {モードの切り替え}<
+      +p{デフォルトではモノルビが選択されますが、熟字訓などを使いたい場合はグループルビを、熟語にルビを付けたい場合には熟語ルビを、使いたくなると思います。}
+      +p{その場合はオプション引数を使って設定します。
+      オプション引数は\code(``\ruby ?:[<設定関数>][`こ`; `ばと`]{|小|鳩|}``);の形で用います。
+      例えば、
+        \code(``\ruby ?:[Ruby.mode Ruby.g][`しぐれ`]{|時|雨|}``);で「\ruby ?:[Ruby.mode Ruby.g][`しぐれ`]{|時|雨|}」となります。
+        \code(`Ruby.mode`);は引数として受け取ったモード関数が指定するモードに切り替えるための関数です。
+        \code(`Ruby.g`);がグループルビモードを指定する関数です。
+        他にはモノルビを指定する\code(`Ruby.m`);、熟語ルビを指定する\code(`Ruby.j`);が存在します。
+      }
+    >
+    +subsection {モノルビモードの使い方}<
+      +p{現時点のデフォルトモードです。}
+      +p{最初にルビ文字をstring listの形で与えます。一つの漢字に付き一つの文字列、というように入力してください。
+      次に親文字をinline-text listの形で与えます。漢字ごとにバラバラにして入力してください。}
+      +p{通常はルビ文字のリスト数と親文字のリスト数は一致しているはずです。
+      ルビ文字が少ない場合、その分は「ルビがない」として扱われ、ルビ文字が多い場合は、溢れたルビは無視されます。}
+      +p{ルビ文字が親文字より短い場合、ルビ文字は中央ぞろえで出力されます。}
+      +p{ルビ文字が親文字より長い場合、親文字は中央ぞろえで出力されます。}
+      +p{以下にいくつか例をあげておきます。}
+      +listing{
+        * \code(``\ruby ?:[Ruby.mode Ruby.m] [`こ`;`とり`]{|小|鳥|}``);：「\ruby ?:[Ruby.mode Ruby.m] [`こ`;`とり`]{|小|鳥|}」
+        * \code(``\ruby ?:[Ruby.mode Ruby.m] [`うぐいす`;]{|鶯|}``);：「\ruby ?:[Ruby.mode Ruby.m] [`うぐいす`;]{|鶯|}」
+        * \code(``\ruby ?:[Ruby.mode Ruby.m] [`しち`;`めん`;`ちょう`;]{|七|面|鳥|}``);：「\ruby ?:[Ruby.mode Ruby.m] [`しち`;`めん`;`ちょう`;]{|七|面|鳥|}」
+      }
+    >
+    +subsection{グループルビモードの使い方}<
+      +p{熟字訓など、分割することのできないルビを振るときに使います。}
+      +p{使い方はモノルビと似ていますが、モノルビと違い、ルビ文字のリスト数は気にする必要がありません。最終的に全て結合された状態で評価されます。親文字のinline-textはしっかり漢字一文字ずつに分割してください。間にスペースを入れる際に不揃いになります。}
+      +p{ルビ文字が親文字より短い場合、ルビ文字は中央ぞろえで出力されます。また、ルビ間に適切な量のスペースが入ります。}
+      +p{ルビ文字が親文字より長い場合、親文字は中央ぞろえで出力されます。また、親文字間に適切な量のスペースが入ります。}
+      +p{以下にいくつか例をあげておきます。}
+      +listing{
+        * \code(``\ruby ?:[Ruby.mode Ruby.g] [`こ`;`とり`]{|小|鳥|}``);：「\ruby ?:[Ruby.mode Ruby.g] [`こ`;`とり`]{|小|鳥|}」
+        * \code(``\ruby ?:[Ruby.mode Ruby.g] [`うぐいす`;]{|鶯|}``);：「\ruby ?:[Ruby.mode Ruby.g] [`うぐいす`;]{|鶯|}」
+        * \code(``\ruby ?:[Ruby.mode Ruby.g] [`しち`;`めん`;`ちょう`;]{|七|面|鳥|}``);：「\ruby ?:[Ruby.mode Ruby.g] [`しち`;`めん`;`ちょう`;]{|七|面|鳥|}」
+        * \code(``\ruby ?:[Ruby.mode Ruby.g] [`ライセンス`;]{|利|用|規|約|}``);：「\ruby ?:[Ruby.mode Ruby.g] [`ライセンス`;]{|利|用|規|約|}」
+        * \code(``\ruby ?:[Ruby.mode Ruby.g] [`クライアント`;]{|顧|客|}``);：「\ruby ?:[Ruby.mode Ruby.g] [`クライアント`;]{|顧|客|}」
+      }
+    >
+    +subsection{熟語ルビモードの使い方}<
+      +p{一かたまりの熟語の親文字間に不要なスペースが入るのを防ぐために文字の位置を融通しあうモードです。}
+      +p{使い方はモノルビと完全に一致します。}
+      +p{JLReq独自の組み方が複雑であったため、もう一つの選択肢として書かれていたJIS X 4051の組み方に従っています。}
+      +p{ルビ文字が親文字より長い組み合わせが一つでも存在する場合、グループルビと同じ挙動をします。}
+      +p{ルビ文字が全て親文字より短い場合、全ての組み合わせに対してモノルビが行われたのと同じ挙動をします。}
+      +p{以下にいくつか例をあげておきます。}
+      +listing{
+        * \code(``\ruby ?:[Ruby.mode Ruby.j] [`こ`;`とり`]{|小|鳥|}``);：「\ruby ?:[Ruby.mode Ruby.j] [`こ`;`とり`]{|小|鳥|}」
+        * \code(``\ruby ?:[Ruby.mode Ruby.j] [`うぐいす`;]{|鶯|}``);：「\ruby ?:[Ruby.mode Ruby.j] [`うぐいす`;]{|鶯|}」
+        * \code(``\ruby ?:[Ruby.mode Ruby.j] [`しち`;`めん`;`ちょう`;]{|七|面|鳥|}``);：「\ruby ?:[Ruby.mode Ruby.j] [`しち`;`めん`;`ちょう`;]{|七|面|鳥|}」
+      }
+    >
+  >
+  +section{進入の調節} <
+    +p{「これが\ruby[`うぐいす`]{|鶯|}という鳥です。」というような文があったとき、ルビの「う」と「す」の下に前後のひらがなを入れられればスペースが詰まり、読みやすくなると感じる人もいると思います。その場合に進入の調節を行います。}
+    +p{通常、前（もしくは後ろ）のひらがなにはルビを1文字文かけることが許可されており、漢字の場合にはルビを0.5文字分かけることが許されています。\SATySFi;で前後の文字の判定や大きさの判定を行うことは難しいため、組版者が手動で進入の大きさの調節を行います。}
+    +p{第一引数の設定部分で\code(`Ruby.before-intrusion Ruby.big`);とすることで、ルビが1文字分前にかかります。\code(`Ruby.before-intrusion`);を\code(`Ruby.after-intrusion`);にすることで前後を切り替えられます。両方を同時に指定することも可能です。}
+    +listing{
+      * \code(``これが\ruby [`うぐいす`]{|鶯|}という鳥です。``);：「\ruby[`うぐいす`]{|鶯|}という鳥です。」
+      * \code(``これが\ruby ?:[Ruby.before-intrusion Ruby.big] [`うぐいす`]{|鶯|}という鳥です``);：「これが\ruby ?:[Ruby.before-intrusion Ruby.big] [`うぐいす`]{|鶯|}という鳥です。」
+      * \code(``これが\ruby ?:[Ruby.after-intrusion Ruby.big] [`うぐいす`]{|鶯|}という鳥です``);：「これが\ruby ?:[Ruby.after-intrusion Ruby.big] [`うぐいす`]{|鶯|}という鳥です。」
+      * \code(``これが\ruby ?:[Ruby.before-intrusion Ruby.big; Ruby.after-intrusion Ruby.big] [`うぐいす`]{|鶯|}という鳥です``);：「これが\ruby ?:[Ruby.before-intrusion Ruby.big; Ruby.after-intrusion Ruby.big] [`うぐいす`]{|鶯|}という鳥です。」
+    }
+    +p{上の例で前後の進入についての設定が分ったでしょうか？\code(`Ruby.big`);では1文字分でした。\code(`Ruby.small`);では0.5文字分になっています。
+    デフォルトでは前後共に\code(`Ruby.none`);が指定されています。これは「進入は行わない」という設定です。}
+  >
+  +section{突出禁止} <
+    +p{行頭や行末でルビのはみ出しを完全に禁止したい場合が存在します。この時は\code(`Ruby.small`);や\code(`Ruby.big`);の代わりに\code(`Ruby.suppresses`);を用いることで実現できます。}
+    +p{その性質上、前後両方に\code(`Ruby.suppresses`);を指定することはできず、モノルビの場合は前側のみ突出禁止が効きます。
+    しかし、グループルビの時は挙動が代わります。グループルビでは通常、端にも少しスペースを作ることにしていますが、\code(`Ruby.suppresses`);を前後両方にかけることでルビと親文字の端を完全に揃えることができるようになっています。}
+    +listing{
+        * \code(``\ruby ?:[Ruby.mode Ruby.g] [`ライセンス`;]{|利|用|規|約|}``);：「\ruby ?:[Ruby.mode Ruby.g] [`ライセンス`;]{|利|用|規|約|}」
+        * \code(``\ruby ?:[Ruby.before-intrusion Ruby.suppresses; Ruby.mode Ruby.g; Ruby.after-intrusion Ruby.suppresses] [`ライセンス`;]{|利|用|規|約|}``);：「\ruby ?:[Ruby.before-intrusion Ruby.suppresses; Ruby.mode Ruby.g; Ruby.after-intrusion Ruby.suppresses] [`ライセンス`;]{|利|用|規|約|}」
+        * \code(``\ruby ?:[Ruby.mode Ruby.g] [`クライアント`;]{|顧|客|}``);：「\ruby ?:[Ruby.mode Ruby.g] [`クライアント`;]{|顧|客|}」
+        * \code(``\ruby ?:[Ruby.before-intrusion Ruby.suppresses; Ruby.mode Ruby.g; Ruby.after-intrusion Ruby.suppresses] [`クライアント`;]{|顧|客|}``);：「\ruby ?:[Ruby.before-intrusion Ruby.suppresses; Ruby.mode Ruby.g; Ruby.after-intrusion Ruby.suppresses] [`クライアント`;]{|顧|客|}」
+    }
+  >
+  +section {バグ報告・修正や機能追加の提案}<
+    +p{このパッケージはバグが存在するかもしれません。バグを発見した場合は以下のURLに報告してください。}
+    +p{\href(`https://github.com/puripuri2100/SATySFi-ruby/issues`){\code(`https://github.com/puripuri2100/SATySFi-ruby/issues`);}}
+    +p{このパッケージに対してコードの修正や機能追加の提案をしたい場合は、GitHubの機能を用いて以下のURLにプルリクエストを送ってください。}
+    +p{\href(`https://github.com/puripuri2100/SATySFi-ruby/pulls`){\code(`https://github.com/puripuri2100/SATySFi-ruby/pulls`);}}
+    +p{バグ報告・修正提案・機能追加提案をお待ちしております。}
+  >
+  +section{ライセンスとコピーライト}<
+    +p{このパッケージとドキュメントはMITライセンスのもとで配布されます。}
+    +p{Copyright (c) 2020 Naoki Kaneko (a.k.a. "puripuri2100")}
+  >
+>

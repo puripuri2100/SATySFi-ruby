@@ -31,4 +31,4 @@ This package released under [the MIT license](https://github.com/puripuri2100/SA
 
 ---
 
-(c) Naoki Kaneko 2020
+(c) 2020 Naoki Kaneko (a.k.a. "puripuri2100")
