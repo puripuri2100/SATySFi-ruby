@@ -1,3 +1,9 @@
+% Copyright (c) 2020 Naoki Kaneko (a.k.a. "puripuri2100")
+%   GitHub:   https://github.com/puripuri2100
+% Repository: https://github.com/puripuri2100/SATySFi-ruby
+% version 0.1.0
+
+
 @require: list
 
 module Ruby: sig
