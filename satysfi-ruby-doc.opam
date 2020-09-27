@@ -15,12 +15,13 @@ depends: [
   "satysfi" {>= "0.0.1" & < "0.0.6"}
   "satyrographos" {>= "0.0.2" & < "0.0.3"}
   "satysfi-dist"
-  "satysfi-ruby" {"0.1.0"}
+  "satysfi-ruby" {"%{version}%"}
 ]
-build: ["satyrographos" "opam" "build"
+build: [
+  ["satyrographos" "opam" "build"
     "-name" "ruby-doc"
     "-prefix" "%{prefix}%"
-    "-script" "%{build}%/Satyristes"
+    "-script" "%{build}%/Satyristes"]
 ]
 install: [
   ["satyrographos" "opam" "install"

@@ -11,3 +11,13 @@
   )
   (opam "satysfi-ruby.opam")
   (dependencies ()))
+
+(libraryDoc
+  (name "ruby-doc")
+  (version "0.1.0")
+  (workingDirectory "doc")
+  (build
+    ((satysfi "ruby-ja.saty" "-o" "ruby-ja.pdf")))
+  (sources
+    ((doc "ruby-ja.pdf" "doc/ruby-ja.pdf")))
+  (opam "satysfi-ruby-doc.opam"))
