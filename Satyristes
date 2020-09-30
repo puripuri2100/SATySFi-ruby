@@ -3,7 +3,7 @@
 
 (library
   (name "ruby")
-  (version "0.1.0")
+  (version "0.1.2")
   (sources
     (
      (package "ruby.satyh" "./ruby.satyh")
@@ -14,7 +14,7 @@
 
 (libraryDoc
   (name "ruby-doc")
-  (version "0.1.0")
+  (version "0.1.2")
   (workingDirectory "doc")
   (build
     ((satysfi "ruby-ja.saty" "-o" "ruby-ja.pdf")))

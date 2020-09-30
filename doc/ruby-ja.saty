@@ -1,7 +1,7 @@
 % Copyright (c) 2020 Naoki Kaneko (a.k.a. "puripuri2100")
 %   GitHub:   https://github.com/puripuri2100
 % Repository: https://github.com/puripuri2100/SATySFi-ruby
-% version 0.1.0
+% version 0.1.2
 
 @require: stdjabook
 @require: code
@@ -17,7 +17,7 @@ document (|
 |) '<
   +section {概要} <
     +p{\SATySFi;でルビを使うためのパッケージです。モノルビ・グループルビ・熟語ルビに対応し、JLReqになるべく準拠するようにしています。}
-    +p{現在のバージョンは0.1.0です。}
+    +p{現在のバージョンは0.1.2です。}
   >
   +section{基本的な使い方}<
     +p{インストールは基本的にsatyrographosで行われることを想定しています。手動で行う場合は、適切な位置に配置し、読み込みも適切に行ってください。}
@@ -120,6 +120,13 @@ document (|
     +p{このパッケージに対してコードの修正や機能追加の提案をしたい場合は、GitHubの機能を用いて以下のURLにプルリクエストを送ってください。}
     +p{\href(`https://github.com/puripuri2100/SATySFi-ruby/pulls`){\code(`https://github.com/puripuri2100/SATySFi-ruby/pulls`);}}
     +p{バグ報告・修正提案・機能追加提案をお待ちしております。}
+  >
+  +section {変更履歴}<
+    +listing{
+      * 2020/9/30 v0.1.2 ルビとボディの間にスペースを入れる処理を付け加えた
+      * 2020/9/28 v0.1.1 ドキュメント追加
+      * 2020/9/27 v0.1.0 作成
+    }
   >
   +section{ライセンスとコピーライト}<
     +p{このパッケージとドキュメントはMITライセンスのもとで配布されます。}

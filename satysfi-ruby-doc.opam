@@ -1,6 +1,6 @@
 opam-version: "2.0"
 name: "satysfi-ruby"
-version: "0.1.0"
+version: "0.1.2"
 synopsis: "Japanese-style ruby in SATySFi"
 description: """Japanese-style ruby in SATySFi."""
 

@@ -1,7 +1,7 @@
 % Copyright (c) 2020 Naoki Kaneko (a.k.a. "puripuri2100")
 %   GitHub:   https://github.com/puripuri2100
 % Repository: https://github.com/puripuri2100/SATySFi-ruby
-% version 0.1.0
+% version 0.1.2
 
 
 @require: list
@@ -147,13 +147,29 @@ let make-ruby-body-pair-lst rb-lst body-lst =
   List.reverse(sub rb-lst body-lst [])
 
 
+% ルビのフォントサイズの取得
+let get-ruby-font-size ctx =
+  % ひらがな用フォントの補正サイズを取得
+  let (_,ratio,_) = get-font HanIdeographic ctx in
+  let font-size = get-font-size ctx in
+  font-size *' ratio
+
+
+% ボディのフォントサイズの取得
+let get-body-font-size ctx =
+  % 漢字用フォントの補正サイズを取得
+  let (_,ratio,_) = get-font Kana ctx in
+  let font-size = get-font-size ctx in
+  font-size *' ratio
+
 
 
 % 横書きのモノルビ
 let make-ruby-mono config pair-lst =
   let ctx = config#ctx in
   let ruby-ctx = config#ruby-ctx in
-  let ruby-font-size = get-font-size ruby-ctx in
+  let body-font-size = get-body-font-size ctx in
+  let ruby-font-size = get-ruby-font-size ruby-ctx in
   let-mutable head-ib-space <- 0pt in
   let-mutable last-ib-space <- 0pt in
   let f (ruby-str-opt, body) is-head is-last =
@@ -218,13 +234,7 @@ let make-ruby-mono config pair-lst =
   in
   let main-lst =
     pair-lst
-    |> List.mapi (fun i pair -> (
-        match (i == 0, i == (List.length pair-lst - 1)) with
-        | (true, true) -> f pair true true
-        | (true, false) -> f pair true false
-        | (false, true) -> f pair false true
-        | (false, false) -> f pair false false
-    ))
+    |> List.mapi (fun i pair -> (f pair (i == 0) (i == (List.length pair-lst - 1))))
   in
   let max-height =
     List.fold-left (fun max-height (_, body-ib) -> (
@@ -238,8 +248,13 @@ let make-ruby-mono config pair-lst =
   let main-ib =
     main-lst
     |> List.map (fun (ruby-ib, body-ib) -> (
-      let (w,h,_) = get-natural-metrics body-ib in
-      let pad = max-height -' h in
+      let (w,h,d) = get-natural-metrics body-ib in
+      let pad =
+        if max-height >' body-font-size then
+          max-height -' h
+        else
+          body-font-size -' h
+      in
       let pad-ib = inline-graphics w pad 0pt (fun _ -> []) in
       if pad >' 0pt then
         line-stack-bottom [ruby-ib; pad-ib; body-ib]
@@ -305,7 +320,8 @@ let make-ruby-mono config pair-lst =
 let make-ruby-gruop config ruby-lst body-lst =
   let ctx = config#ctx in
   let ruby-ctx = config#ruby-ctx in
-  let ruby-font-size = get-font-size ruby-ctx in
+  let body-font-size = get-body-font-size ctx in
+  let ruby-font-size = get-ruby-font-size ruby-ctx in
   let ruby-str = List.fold-left (^) ` ` ruby-lst in
   let (ruby-width,_,_) =
     ruby-str
@@ -313,7 +329,7 @@ let make-ruby-gruop config ruby-lst body-lst =
     |> read-inline ruby-ctx
     |> get-natural-metrics
   in
-  let (body-width,_,_) =
+  let (body-width,body-height,body-depth) =
     body-lst
     |> List.map (read-inline ctx)
     |> List.fold-left (++) inline-nil
@@ -321,6 +337,13 @@ let make-ruby-gruop config ruby-lst body-lst =
   in
   let ruby-str-lst = str-to-lst ruby-str in
   let ruby-str-size = List.length ruby-str-lst in
+  let pad-ib =
+    if body-height >' body-font-size then
+      inline-nil
+    else
+      % 余白を作る
+      inline-graphics body-width (body-font-size -' body-height) 0pt (fun _ -> [])
+  in
   if body-width >' ruby-width then
     let body-ib =
       body-lst
@@ -346,53 +369,8 @@ let make-ruby-gruop config ruby-lst body-lst =
           ))
           inline-nil
       in
-      line-stack-bottom [ruby-ib; body-ib]
+      line-stack-bottom [ruby-ib; pad-ib; body-ib]
     )
-    % ========= もしかしたら要らないかも 要件等
-    % ルビが短いときに突出禁止にする意味が無さそうなので一旦コメントアウト
-    %| (SuppressionProtrusion, _) -> (
-    %  let ruby-space =
-    %    (body-width -' ruby-width) *' (1.0 /. (float (ruby-str-size * 2 - 1)))
-    %  in
-    %  let ruby-ib =
-    %    ruby-str-lst
-    %    |> List.map (fun s -> s |> embed-string |> read-inline ruby-ctx)
-    %    |> List.fold-lefti
-    %      (fun i ib1 ib2 -> (
-    %        if i == 0 then
-    %          % 最初はスペースを入れない
-    %          ib2
-    %        else
-    %          if i == (ruby-str-size - 1) then
-    %            % 最後にスペースを通常の1/2分入れる
-    %            ib1 ++ inline-skip (ruby-space *' 2.0) ++ ib2 ++ inline-skip ruby-space
-    %          else
-    %            ib1 ++ inline-skip (ruby-space *' 2.0) ++ ib2
-    %      ))
-    %      inline-nil
-    %  in
-    %  line-stack-bottom [ruby-ib; body-ib]
-    %)
-    %| (_, SuppressionProtrusion) -> (
-    %  let ruby-space =
-    %    (body-width -' ruby-width) *' (1.0 /. (float (ruby-str-size * 2 - 1)))
-    %  in
-    %  let ruby-ib =
-    %    ruby-str-lst
-    %    |> List.map (fun s -> s |> embed-string |> read-inline ruby-ctx)
-    %    |> List.fold-lefti
-    %      (fun i ib1 ib2 -> (
-    %        if i == 0 then
-    %          % 最初にスペースを通常の1/2分入れる
-    %          inline-skip ruby-space ++ ib2
-    %        else
-    %          ib1 ++ inline-skip (ruby-space *' 2.0) ++ ib2
-    %      ))
-    %      inline-nil
-    %  in
-    %  line-stack-bottom [ruby-ib; body-ib]
-    %)
-    % ==============
     | _ -> (
       let ruby-space =
         (body-width -' ruby-width) *' (1.0 /. (float (ruby-str-size * 2)))
@@ -414,7 +392,7 @@ let make-ruby-gruop config ruby-lst body-lst =
           ))
           inline-nil
       in
-      line-stack-bottom [ruby-ib; body-ib]
+      line-stack-bottom [ruby-ib; pad-ib; body-ib]
     )
   else
     % ルビはそのまま組む
@@ -497,7 +475,7 @@ let make-ruby-gruop config ruby-lst body-lst =
       let body-ib =
         body-ib ++ inline-skip intrusion-space
       in
-      line-stack-bottom [ruby-ib; body-ib]
+      line-stack-bottom [ruby-ib; pad-ib; body-ib]
     )
     | (_, SuppressionProtrusion) -> (
       % スペースは1:1:0
@@ -541,7 +519,7 @@ let make-ruby-gruop config ruby-lst body-lst =
       let body-ib =
         inline-skip intrusion-space ++ body-ib
       in
-      line-stack-bottom [ruby-ib; body-ib]
+      line-stack-bottom [ruby-ib; pad-ib; body-ib]
     )
     | _ -> (
       % スペースは1:2:1
@@ -618,7 +596,7 @@ let make-ruby-gruop config ruby-lst body-lst =
       let body-ib =
         add-space before-intrusion-space after-intrusion-space body-ib
       in
-      line-stack-bottom [ruby-ib; body-ib]
+      line-stack-bottom [ruby-ib; pad-ib; body-ib]
     )
 
 % JIS X 4051での規定に従う
