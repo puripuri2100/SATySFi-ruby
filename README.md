@@ -1,4 +1,4 @@
-version 0.1.0
+version 0.1.2
 
 Japanese-style ruby in SATySFi
 
